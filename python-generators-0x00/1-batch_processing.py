@@ -14,26 +14,19 @@ def stream_users_in_batches(batch_size):
         batch_size (int): Number of users to fetch in each batch
         
     Yields:
-        list: Batch of users as dictionaries
+        dict: Individual user records from the database
     """
-    # Get total number of users to know when to stop
-    total_users = len(seed.connect_to_prodev())
+    # Get all users from database
+    all_users = seed.connect_to_prodev()
     
-    # Loop 1: Iterate through batches
-    for start_index in range(0, total_users, batch_size):
-        # Calculate end index for current batch
-        end_index = min(start_index + batch_size, total_users)
+    # Loop 1: Process users in batches
+    for i in range(0, len(all_users), batch_size):
+        # Get current batch slice
+        batch = all_users[i:i + batch_size]
         
-        # Fetch batch of users from database
-        batch = []
-        users_data = seed.connect_to_prodev()
-        
-        # Loop 2: Build current batch
-        for i in range(start_index, end_index):
-            batch.append(users_data[i])
-        
-        # Yield the current batch
-        yield batch
+        # Loop 2: Yield each user in the batch
+        for user in batch:
+            yield user
 
 
 def batch_processing(batch_size):
@@ -46,12 +39,8 @@ def batch_processing(batch_size):
     Prints:
         Filtered users over 25 years old
     """
-    # Get batches using the generator
-    batches = stream_users_in_batches(batch_size)
-    
-    # Loop 3: Process each batch
-    for batch in batches:
+    # Loop 3: Process each user from the generator
+    for user in stream_users_in_batches(batch_size):
         # Filter users over 25 and print them
-        for user in batch:
-            if user.get('age', 0) > 25:
-                print(user)
+        if user.get('age', 0) > 25:
+            print(user)
