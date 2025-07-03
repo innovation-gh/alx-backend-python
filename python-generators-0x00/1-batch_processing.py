@@ -30,16 +30,17 @@ def stream_users_in_batches(batch_size):
         # Execute query and get batch results
         batch_results = connection.execute(query)
         
-        # Check if no more results
-        if not batch_results:
-            break
-            
         # Loop 2: Yield each user in the current batch
         for user in batch_results:
             yield user
             
-        # Move to next batch
-        offset += batch_size
+        # Check if batch was smaller than requested size (end of data)
+        if len(batch_results) < batch_size:
+            # End of data reached, generator will naturally stop
+            pass
+        else:
+            # Move to next batch
+            offset += batch_size
 
 
 def batch_processing(batch_size):
