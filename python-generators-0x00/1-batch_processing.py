@@ -16,17 +16,30 @@ def stream_users_in_batches(batch_size):
     Yields:
         dict: Individual user records from the database
     """
-    # Get all users from database
-    all_users = seed.connect_to_prodev()
+    # Get database connection
+    connection = seed.connect_to_prodev()
     
-    # Loop 1: Process users in batches
-    for i in range(0, len(all_users), batch_size):
-        # Get current batch slice
-        batch = all_users[i:i + batch_size]
+    # Initialize offset for pagination
+    offset = 0
+    
+    # Loop 1: Fetch data in batches using SQL queries
+    while True:
+        # SQL query to SELECT users FROM user_data table in batches
+        query = f"SELECT * FROM user_data LIMIT {batch_size} OFFSET {offset}"
         
-        # Loop 2: Yield each user in the batch
-        for user in batch:
+        # Execute query and get batch results
+        batch_results = connection.execute(query)
+        
+        # Check if no more results
+        if not batch_results:
+            break
+            
+        # Loop 2: Yield each user in the current batch
+        for user in batch_results:
             yield user
+            
+        # Move to next batch
+        offset += batch_size
 
 
 def batch_processing(batch_size):
