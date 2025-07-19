@@ -2,7 +2,7 @@
 """Unit and integration tests for client module."""
 
 import unittest
-from unittest.mock import patch, PropertyMock, Mock
+from unittest.mock import patch, PropertyMock
 from parameterized import parameterized, parameterized_class
 from client import GithubOrgClient
 from fixtures import TEST_PAYLOAD
@@ -24,7 +24,8 @@ class TestGithubOrgClient(unittest.TestCase):
         client = GithubOrgClient(org_name)
         result = client.org
         
-        mock_get_json.assert_called_once_with(f"https://api.github.com/orgs/{org_name}")
+        expected_url = f"https://api.github.com/orgs/{org_name}"
+        mock_get_json.assert_called_once_with(expected_url)
         self.assertEqual(result, expected_payload)
 
     def test_public_repos_url(self):
@@ -32,7 +33,8 @@ class TestGithubOrgClient(unittest.TestCase):
         expected_url = "https://api.github.com/orgs/test-org/repos"
         payload = {"repos_url": expected_url}
         
-        with patch.object(GithubOrgClient, 'org', new_callable=PropertyMock) as mock_org:
+        with patch.object(GithubOrgClient, 'org',
+                          new_callable=PropertyMock) as mock_org:
             mock_org.return_value = payload
             client = GithubOrgClient("test-org")
             
@@ -49,8 +51,8 @@ class TestGithubOrgClient(unittest.TestCase):
         ]
         mock_get_json.return_value = test_payload
         
-        with patch.object(GithubOrgClient, '_public_repos_url', 
-                         new_callable=PropertyMock) as mock_repos_url:
+        with patch.object(GithubOrgClient, '_public_repos_url',
+                          new_callable=PropertyMock) as mock_repos_url:
             test_url = "https://api.github.com/orgs/test-org/repos"
             mock_repos_url.return_value = test_url
             
@@ -86,8 +88,10 @@ class TestIntegrationGithubOrgClient(unittest.TestCase):
         """Set up class for integration tests."""
         def get_side_effect(url):
             """Side effect function for mocking requests.get."""
+            from unittest.mock import Mock
             mock_response = Mock()
-            if url == f"https://api.github.com/orgs/{cls.org_payload['login']}":
+            org_url = f"https://api.github.com/orgs/{cls.org_payload['login']}"
+            if url == org_url:
                 mock_response.json.return_value = cls.org_payload
             elif url == cls.org_payload["repos_url"]:
                 mock_response.json.return_value = cls.repos_payload
