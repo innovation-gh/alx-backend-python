@@ -1,5 +1,10 @@
 #!/usr/bin/env python3
-"""Fixtures for integration tests."""
+"""
+Fixtures for integration tests.
+
+This module contains test fixtures used for integration testing
+of the GithubOrgClient class.
+"""
 
 TEST_PAYLOAD = [
     (
@@ -31,7 +36,7 @@ TEST_PAYLOAD = [
                     "id": 1342004,
                 },
                 "html_url": "https://github.com/google/episodes.dart",
-                "description": "A framework for timing performance  of web apps.",
+                "description": "A framework for timing performance of web apps.",
                 "fork": False,
                 "url": "https://api.github.com/repos/google/episodes.dart",
             },
