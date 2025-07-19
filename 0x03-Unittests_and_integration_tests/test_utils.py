@@ -23,9 +23,9 @@ class TestAccessNestedMap(unittest.TestCase):
         ({}, ("a",), KeyError),
         ({"a": 1}, ("a", "b"), KeyError),
     ])
-    def test_access_nested_map_exception(self, nested_map, path, expected_exception):
+    def test_access_nested_map_exception(self, nested_map, path, expected):
         """Test that access_nested_map raises KeyError for invalid paths."""
-        with self.assertRaises(expected_exception):
+        with self.assertRaises(expected):
             access_nested_map(nested_map, path)
 
 
@@ -38,7 +38,7 @@ class TestGetJson(unittest.TestCase):
     ])
     def test_get_json(self, test_url, test_payload):
         """Test that get_json returns expected result."""
-        with patch('requests.get') as mock_get:
+        with patch('utils.requests.get') as mock_get:
             mock_response = Mock()
             mock_response.json.return_value = test_payload
             mock_get.return_value = mock_response
@@ -55,14 +55,19 @@ class TestMemoize(unittest.TestCase):
     def test_memoize(self):
         """Test that memoize decorator caches method calls."""
         class TestClass:
+            """Test class for memoize testing."""
+
             def a_method(self):
+                """Test method."""
                 return 42
 
             @memoize
             def a_property(self):
+                """Test property with memoize decorator."""
                 return self.a_method()
 
-        with patch.object(TestClass, 'a_method', return_value=42) as mock_method:
+        with patch.object(TestClass, 'a_method',
+                          return_value=42) as mock_method:
             test_instance = TestClass()
             
             # Call a_property twice
