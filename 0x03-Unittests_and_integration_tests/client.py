@@ -1,11 +1,9 @@
 #!/usr/bin/env python3
 """
 GitHub organization client module.
-
 This module provides a client for interacting with GitHub's organization API,
 allowing users to retrieve organization information and repository data.
 """
-
 from typing import List, Dict
 from utils import get_json, memoize
 
@@ -86,13 +84,14 @@ class GithubOrgClient:
             
         Returns:
             True if repository has the license, False otherwise
-            
-        Raises:
-            AssertionError: If license_key is None or repo doesn't have
-                          required license structure
         """
-        assert license_key is not None, "license_key cannot be None"
-        assert "license" in repo, "repo must have a license key"
-        assert "key" in repo["license"], "license must have a key"
+        if license_key is None:
+            return False
+        
+        if "license" not in repo or repo["license"] is None:
+            return False
+        
+        if "key" not in repo["license"]:
+            return False
         
         return repo["license"]["key"] == license_key
