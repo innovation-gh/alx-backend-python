@@ -7,16 +7,22 @@ class UserSerializer(serializers.ModelSerializer):
     """
     Serializer for User model with basic user information
     """
-    full_name = serializers.SerializerMethodField()
+    full_name = serializers.CharField(read_only=True)
+    username = serializers.CharField(max_length=150)
+    email = serializers.CharField(max_length=254)
+    first_name = serializers.CharField(max_length=30, required=False, allow_blank=True)
+    last_name = serializers.CharField(max_length=150, required=False, allow_blank=True)
     
     class Meta:
         model = User
         fields = ['id', 'username', 'email', 'first_name', 'last_name', 'full_name', 'date_joined']
-        read_only_fields = ['id', 'date_joined']
+        read_only_fields = ['id', 'date_joined', 'full_name']
     
-    def get_full_name(self, obj):
-        """Return full name of the user"""
-        return f"{obj.first_name} {obj.last_name}".strip()
+    def to_representation(self, instance):
+        """Add computed full_name to representation"""
+        data = super().to_representation(instance)
+        data['full_name'] = f"{instance.first_name} {instance.last_name}".strip()
+        return data
 
 
 class MessageSerializer(serializers.ModelSerializer):
@@ -25,6 +31,7 @@ class MessageSerializer(serializers.ModelSerializer):
     """
     sender = UserSerializer(read_only=True)
     sender_id = serializers.IntegerField(write_only=True)
+    message_body = serializers.CharField(max_length=1000)
     
     class Meta:
         model = Message
@@ -154,6 +161,7 @@ class MessageCreateSerializer(serializers.ModelSerializer):
     """
     sender_id = serializers.IntegerField(write_only=True)
     conversation_id = serializers.IntegerField(write_only=True)
+    message_body = serializers.CharField(max_length=1000)
     
     class Meta:
         model = Message
