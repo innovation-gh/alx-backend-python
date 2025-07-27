@@ -1,211 +1,200 @@
+"""
+Serializers for the chats app.
+"""
 from rest_framework import serializers
-from django.contrib.auth.models import User
-from .models import Conversation, Message
+from django.contrib.auth.password_validation import validate_password
+from django.core.exceptions import ValidationError
+from .models import User
 
 
 class UserSerializer(serializers.ModelSerializer):
     """
-    Serializer for User model with basic user information
+    Serializer for User model - used for profile views.
     """
-    full_name = serializers.CharField(read_only=True)
-    username = serializers.CharField(max_length=150)
-    email = serializers.CharField(max_length=254)
-    first_name = serializers.CharField(max_length=30, required=False, allow_blank=True)
-    last_name = serializers.CharField(max_length=150, required=False, allow_blank=True)
+    class Meta:
+        model = User
+        fields = ('id', 'username', 'email', 'first_name', 'last_name', 'date_joined', 'last_login')
+        read_only_fields = ('id', 'date_joined', 'last_login')
+
+
+class UserRegistrationSerializer(serializers.ModelSerializer):
+    """
+    Serializer for user registration.
+    """
+    password = serializers.CharField(write_only=True, min_length=8)
+    password_confirm = serializers.CharField(write_only=True)
     
     class Meta:
         model = User
-        fields = ['id', 'username', 'email', 'first_name', 'last_name', 'full_name', 'date_joined']
-        read_only_fields = ['id', 'date_joined', 'full_name']
+        fields = ('username', 'email', 'password', 'password_confirm', 'first_name', 'last_name')
+        extra_kwargs = {
+            'password': {'write_only': True},
+            'email': {'required': True}
+        }
     
-    def to_representation(self, instance):
-        """Add computed full_name to representation"""
-        data = super().to_representation(instance)
-        data['full_name'] = f"{instance.first_name} {instance.last_name}".strip()
-        return data
-
-
-class MessageSerializer(serializers.ModelSerializer):
-    """
-    Serializer for Message model with sender information
-    """
-    sender = UserSerializer(read_only=True)
-    sender_id = serializers.IntegerField(write_only=True)
-    message_body = serializers.CharField(max_length=1000)
+    def validate_email(self, value):
+        """
+        Check that the email is unique.
+        """
+        if User.objects.filter(email=value).exists():
+            raise serializers.ValidationError("A user with this email already exists.")
+        return value
     
-    class Meta:
-        model = Message
-        fields = ['id', 'sender', 'sender_id', 'message_body', 'sent_at']
-        read_only_fields = ['id', 'sent_at']
+    def validate_username(self, value):
+        """
+        Check that the username is unique.
+        """
+        if User.objects.filter(username=value).exists():
+            raise serializers.ValidationError("A user with this username already exists.")
+        return value
     
-    def validate_sender_id(self, value):
-        """Validate that the sender exists"""
+    def validate(self, attrs):
+        """
+        Check that passwords match and validate password strength.
+        """
+        password = attrs.get('password')
+        password_confirm = attrs.get('password_confirm')
+        
+        if password != password_confirm:
+            raise serializers.ValidationError({
+                'password_confirm': 'Passwords do not match.'
+            })
+        
+        # Validate password strength
         try:
-            User.objects.get(id=value)
-            return value
-        except User.DoesNotExist:
-            raise serializers.ValidationError("Invalid sender ID")
+            validate_password(password)
+        except ValidationError as e:
+            raise serializers.ValidationError({
+                'password': list(e.messages)
+            })
+        
+        return attrs
+    
+    def create(self, validated_data):
+        """
+        Create a new user with encrypted password.
+        """
+        # Remove password_confirm from validated_data
+        validated_data.pop('password_confirm', None)
+        
+        # Create user
+        user = User.objects.create_user(
+            username=validated_data['username'],
+            email=validated_data['email'],
+            password=validated_data['password'],
+            first_name=validated_data.get('first_name', ''),
+            last_name=validated_data.get('last_name', '')
+        )
+        
+        return user
 
 
+class UserListSerializer(serializers.ModelSerializer):
+    """
+    Serializer for listing users (limited information).
+    """
+    class Meta:
+        model = User
+        fields = ('id', 'username', 'first_name', 'last_name')
+
+
+class UserProfileUpdateSerializer(serializers.ModelSerializer):
+    """
+    Serializer for updating user profile.
+    """
+    class Meta:
+        model = User
+        fields = ('first_name', 'last_name', 'email')
+    
+    def validate_email(self, value):
+        """
+        Check that the email is unique (excluding current user).
+        """
+        user = self.instance
+        if User.objects.filter(email=value).exclude(id=user.id).exists():
+            raise serializers.ValidationError("A user with this email already exists.")
+        return value
+
+
+class ChangePasswordSerializer(serializers.Serializer):
+    """
+    Serializer for password change.
+    """
+    old_password = serializers.CharField(required=True)
+    new_password = serializers.CharField(required=True, min_length=8)
+    new_password_confirm = serializers.CharField(required=True)
+    
+    def validate(self, attrs):
+        """
+        Check that new passwords match and validate password strength.
+        """
+        new_password = attrs.get('new_password')
+        new_password_confirm = attrs.get('new_password_confirm')
+        
+        if new_password != new_password_confirm:
+            raise serializers.ValidationError({
+                'new_password_confirm': 'New passwords do not match.'
+            })
+        
+        # Validate password strength
+        try:
+            validate_password(new_password)
+        except ValidationError as e:
+            raise serializers.ValidationError({
+                'new_password': list(e.messages)
+            })
+        
+        return attrs
+
+
+# Additional serializers for messaging functionality
 class ConversationSerializer(serializers.ModelSerializer):
     """
-    Serializer for Conversation model with participants and messages
+    Serializer for Conversation model.
     """
-    participants = UserSerializer(many=True, read_only=True)
-    participant_ids = serializers.ListField(
+    participants = UserListSerializer(many=True, read_only=True)
+    participants_ids = serializers.ListField(
         child=serializers.IntegerField(),
         write_only=True,
         required=False
     )
-    messages = MessageSerializer(many=True, read_only=True)
-    message_count = serializers.SerializerMethodField()
-    last_message = serializers.SerializerMethodField()
     
     class Meta:
-        model = Conversation
-        fields = [
-            'id', 'participants', 'participant_ids', 'messages', 
-            'message_count', 'last_message', 'created_at'
-        ]
-        read_only_fields = ['id', 'created_at']
-    
-    def get_message_count(self, obj):
-        """Return the total number of messages in the conversation"""
-        return obj.messages.count()
-    
-    def get_last_message(self, obj):
-        """Return the most recent message in the conversation"""
-        last_msg = obj.messages.order_by('-sent_at').first()
-        if last_msg:
-            return {
-                'id': last_msg.id,
-                'sender': last_msg.sender.username,
-                'message_body': last_msg.message_body,
-                'sent_at': last_msg.sent_at
-            }
-        return None
-    
-    def validate_participant_ids(self, value):
-        """Validate that all participant IDs exist and there are at least 2 participants"""
-        if len(value) < 2:
-            raise serializers.ValidationError("A conversation must have at least 2 participants")
-        
-        # Check if all users exist
-        existing_users = User.objects.filter(id__in=value)
-        if existing_users.count() != len(value):
-            raise serializers.ValidationError("One or more participant IDs are invalid")
-        
-        return value
+        model = None  # Will be set when you have the Conversation model
+        fields = '__all__'  # Adjust based on your model fields
     
     def create(self, validated_data):
-        """Create a conversation with participants"""
-        participant_ids = validated_data.pop('participant_ids', [])
-        conversation = Conversation.objects.create(**validated_data)
+        """
+        Create conversation with participants.
+        """
+        participants_ids = validated_data.pop('participants_ids', [])
+        conversation = super().create(validated_data)
         
-        if participant_ids:
-            participants = User.objects.filter(id__in=participant_ids)
+        # Add participants
+        if participants_ids:
+            participants = User.objects.filter(id__in=participants_ids)
             conversation.participants.set(participants)
         
+        # Add creator as participant
+        conversation.participants.add(self.context['request'].user)
+        
         return conversation
-    
-    def update(self, instance, validated_data):
-        """Update conversation and handle participant updates"""
-        participant_ids = validated_data.pop('participant_ids', None)
-        
-        # Update other fields
-        for attr, value in validated_data.items():
-            setattr(instance, attr, value)
-        instance.save()
-        
-        # Update participants if provided
-        if participant_ids is not None:
-            participants = User.objects.filter(id__in=participant_ids)
-            instance.participants.set(participants)
-        
-        return instance
 
 
-class ConversationListSerializer(serializers.ModelSerializer):
+class MessageSerializer(serializers.ModelSerializer):
     """
-    Lightweight serializer for conversation lists (without nested messages)
+    Serializer for Message model.
     """
-    participants = UserSerializer(many=True, read_only=True)
-    message_count = serializers.SerializerMethodField()
-    last_message = serializers.SerializerMethodField()
+    sender = UserListSerializer(read_only=True)
     
     class Meta:
-        model = Conversation
-        fields = ['id', 'participants', 'message_count', 'last_message', 'created_at']
-        read_only_fields = ['id', 'created_at']
-    
-    def get_message_count(self, obj):
-        """Return the total number of messages in the conversation"""
-        return obj.messages.count()
-    
-    def get_last_message(self, obj):
-        """Return the most recent message in the conversation"""
-        last_msg = obj.messages.order_by('-sent_at').first()
-        if last_msg:
-            return {
-                'id': last_msg.id,
-                'sender': last_msg.sender.username,
-                'message_body': last_msg.message_body[:50] + '...' if len(last_msg.message_body) > 50 else last_msg.message_body,
-                'sent_at': last_msg.sent_at
-            }
-        return None
-
-
-class MessageCreateSerializer(serializers.ModelSerializer):
-    """
-    Serializer specifically for creating messages
-    """
-    sender_id = serializers.IntegerField(write_only=True)
-    conversation_id = serializers.IntegerField(write_only=True)
-    message_body = serializers.CharField(max_length=1000)
-    
-    class Meta:
-        model = Message
-        fields = ['sender_id', 'conversation_id', 'message_body']
-    
-    def validate_sender_id(self, value):
-        """Validate that the sender exists"""
-        try:
-            User.objects.get(id=value)
-            return value
-        except User.DoesNotExist:
-            raise serializers.ValidationError("Invalid sender ID")
-    
-    def validate_conversation_id(self, value):
-        """Validate that the conversation exists"""
-        try:
-            Conversation.objects.get(id=value)
-            return value
-        except Conversation.DoesNotExist:
-            raise serializers.ValidationError("Invalid conversation ID")
-    
-    def validate(self, data):
-        """Validate that the sender is a participant in the conversation"""
-        try:
-            conversation = Conversation.objects.get(id=data['conversation_id'])
-            sender = User.objects.get(id=data['sender_id'])
-            
-            if not conversation.participants.filter(id=sender.id).exists():
-                raise serializers.ValidationError(
-                    "Sender must be a participant in the conversation"
-                )
-        except (Conversation.DoesNotExist, User.DoesNotExist):
-            pass  # These will be caught by individual field validators
-        
-        return data
+        model = None  # Will be set when you have the Message model
+        fields = '__all__'  # Adjust based on your model fields
+        read_only_fields = ('sender', 'timestamp')
     
     def create(self, validated_data):
-        """Create a message"""
-        sender = User.objects.get(id=validated_data.pop('sender_id'))
-        conversation = Conversation.objects.get(id=validated_data.pop('conversation_id'))
-        
-        message = Message.objects.create(
-            sender=sender,
-            conversation=conversation,
-            **validated_data
-        )
-        return message
+        """
+        Create message with sender set to current user.
+        """
+        validated_data['sender'] = self.context['request'].user
+        return super().create(validated_data)
