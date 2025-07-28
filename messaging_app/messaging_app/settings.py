@@ -2,10 +2,11 @@ import os
 from pathlib import Path
 from datetime import timedelta
 
+# Base Directory
 BASE_DIR = Path(__file__).resolve().parent.parent
 
+# Get Environment Variables
 def get_env_variable(var_name, default=None):
-    """Get environment variable or raise exception if required and not found."""
     try:
         return os.environ[var_name]
     except KeyError:
@@ -13,11 +14,12 @@ def get_env_variable(var_name, default=None):
             return default
         raise ValueError(f"Set the {var_name} environment variable")
 
+# Basic Settings
 SECRET_KEY = get_env_variable('SECRET_KEY', 'django-insecure-default-secret')
-
 DEBUG = get_env_variable('DEBUG', 'True').lower() in ['true', '1', 'yes']
 ALLOWED_HOSTS = get_env_variable('ALLOWED_HOSTS', 'localhost,127.0.0.1').split(',')
 
+# Installed Apps
 INSTALLED_APPS = [
     'django.contrib.admin',
     'django.contrib.auth',
@@ -36,6 +38,7 @@ INSTALLED_APPS = [
     'chats',
 ]
 
+# Middleware
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
@@ -45,12 +48,14 @@ MIDDLEWARE = [
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
     
-    # Custom middleware
+    # Custom middleware to log user requests
     'chats.middleware.RequestLoggingMiddleware',
 ]
 
+# URL Configuration
 ROOT_URLCONF = 'messaging_app.urls'
 
+# Templates
 TEMPLATES = [
     {
         'BACKEND': 'django.template.backends.django.DjangoTemplates',
@@ -67,8 +72,10 @@ TEMPLATES = [
     },
 ]
 
+# WSGI
 WSGI_APPLICATION = 'messaging_app.wsgi.application'
 
+# Database
 DATABASES = {
     'default': {
         'ENGINE': get_env_variable('DB_ENGINE', 'django.db.backends.sqlite3'),
@@ -80,6 +87,7 @@ DATABASES = {
     }
 }
 
+# Authentication
 AUTH_PASSWORD_VALIDATORS = [
     {'NAME': 'django.contrib.auth.password_validation.UserAttributeSimilarityValidator'},
     {'NAME': 'django.contrib.auth.password_validation.MinimumLengthValidator'},
@@ -87,11 +95,15 @@ AUTH_PASSWORD_VALIDATORS = [
     {'NAME': 'django.contrib.auth.password_validation.NumericPasswordValidator'},
 ]
 
+AUTH_USER_MODEL = 'chats.User'
+
+# Internationalization
 LANGUAGE_CODE = 'en-us'
 TIME_ZONE = get_env_variable('TIME_ZONE', 'UTC')
 USE_I18N = True
 USE_TZ = True
 
+# Static and Media
 STATIC_URL = '/static/'
 STATIC_ROOT = BASE_DIR / 'staticfiles'
 STATICFILES_DIRS = [BASE_DIR / 'static']
@@ -100,9 +112,8 @@ MEDIA_URL = '/media/'
 MEDIA_ROOT = BASE_DIR / 'media'
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
-AUTH_USER_MODEL = 'chats.User'
 
-# Ensure logs directory exists
+# Logs
 LOG_DIR = BASE_DIR / 'logs'
 LOG_DIR.mkdir(exist_ok=True)
 
@@ -129,7 +140,7 @@ REST_FRAMEWORK = {
     },
 }
 
-# Add Browsable API & SessionAuth in development only
+# Dev Browsable API
 if DEBUG:
     REST_FRAMEWORK['DEFAULT_AUTHENTICATION_CLASSES'] += [
         'rest_framework.authentication.SessionAuthentication'
@@ -165,7 +176,7 @@ CORS_ALLOWED_ORIGINS = [
     "http://127.0.0.1:3000",
 ]
 
-# Security
+# Production Security
 if not DEBUG:
     SECURE_SSL_REDIRECT = True
     SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
@@ -180,7 +191,7 @@ if not DEBUG:
     SESSION_COOKIE_HTTPONLY = True
     CSRF_COOKIE_HTTPONLY = True
 
-# Logging
+# Logging (for django.log)
 LOGGING = {
     'version': 1,
     'disable_existing_loggers': False,
