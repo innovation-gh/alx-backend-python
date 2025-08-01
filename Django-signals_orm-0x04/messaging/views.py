@@ -7,12 +7,19 @@ from .models import Message, Notification, MessageHistory
 
 @login_required
 def inbox(request):
-    """Display user's inbox with unread messages"""
-    unread_messages = Message.unread.for_user(request.user)
+    """Display user's inbox with unread messages using custom manager"""
+    # Use custom manager with .only() optimization
+    unread_messages = Message.unread.unread_for_user(request.user)
+    
+    # Additional optimization with .only() for related fields
+    all_messages = Message.objects.filter(
+        receiver=request.user
+    ).only('id', 'sender', 'content', 'timestamp', 'read').order_by('-timestamp')
     
     context = {
         'unread_messages': unread_messages,
-        'unread_count': unread_messages.count()
+        'unread_count': unread_messages.count(),
+        'all_messages': all_messages
     }
     return render(request, 'messaging/inbox.html', context)
 
@@ -38,7 +45,7 @@ def conversation_view(request, conversation_id):
 @login_required
 def threaded_messages(request):
     """Display messages sent by current user with their threading structure"""
-    # Get messages sent by the current user with optimized queries
+    # Get messages sent by the current user with optimized queries and .only()
     user_messages = Message.objects.filter(
         sender=request.user
     ).select_related(
@@ -48,17 +55,23 @@ def threaded_messages(request):
             'replies',
             queryset=Message.objects.select_related('sender', 'receiver').order_by('timestamp')
         )
+    ).only(
+        'id', 'receiver', 'parent_message', 'content', 'timestamp', 'edited'
     ).order_by('-timestamp')
     
+    # Get unread messages for user's inbox using custom manager
+    unread_messages = Message.unread.unread_for_user(request.user)
+    
     context = {
-        'user_messages': user_messages
+        'user_messages': user_messages,
+        'unread_messages': unread_messages
     }
     return render(request, 'messaging/threaded_messages.html', context)
 
 @login_required
 def sent_messages(request):
     """Display all messages sent by the current user with replies"""
-    # Messages sent by current user with optimized loading
+    # Messages sent by current user with optimized loading using .only()
     sent_messages = Message.objects.filter(
         sender=request.user
     ).select_related(
@@ -66,10 +79,16 @@ def sent_messages(request):
     ).prefetch_related(
         'replies__sender',
         'replies__receiver'
+    ).only(
+        'id', 'receiver', 'content', 'timestamp', 'edited', 'read'
     ).order_by('-timestamp')
     
+    # Also get unread messages using custom manager
+    unread_messages = Message.unread.unread_for_user(request.user)
+    
     context = {
-        'sent_messages': sent_messages
+        'sent_messages': sent_messages,
+        'unread_messages': unread_messages
     }
     return render(request, 'messaging/sent_messages.html', context)
 
