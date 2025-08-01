@@ -8,6 +8,7 @@ MIDDLEWARE = [
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'chats.middleware.RequestLoggingMiddleware',  # Request logging middleware
     'chats.middleware.RestrictAccessByTimeMiddleware',  # Time restriction middleware
+    'chats.middleware.OffensiveLanguageMiddleware',  # Rate limiting middleware
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
 ]
