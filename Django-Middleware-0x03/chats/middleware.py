@@ -155,3 +155,121 @@ class OffensiveLanguageMiddleware:
                 timestamp for timestamp in self.ip_message_history[ip_address]
                 if timestamp.timestamp() > cutoff_time
             ]
+
+
+class RolePermissionMiddleware:
+    """
+    Middleware that checks the user's role and restricts access to admin and moderator users only.
+    Returns 403 Forbidden for users who are not admin or moderator.
+    """
+    
+    def __init__(self, get_response):
+        """
+        Initialize the middleware.
+        Args:
+            get_response: The next middleware or view in the chain
+        """
+        self.get_response = get_response
+        # Define allowed roles
+        self.allowed_roles = ['admin', 'moderator']
+        # Define paths that require role checking
+        self.protected_paths = [
+            '/admin/',
+            '/api/admin/',
+            '/api/moderator/',
+            '/chat/admin/',
+            '/chat/moderate/',
+        ]
+    
+    def __call__(self, request):
+        """
+        Process the request and check user role permissions.
+        Args:
+            request: The HTTP request object
+        Returns:
+            The response from the next middleware/view or a 403 Forbidden response
+        """
+        # Check if the request path requires role verification
+        if self.requires_role_check(request):
+            # Check if user is authenticated
+            if not request.user.is_authenticated:
+                from django.http import JsonResponse
+                return JsonResponse(
+                    {
+                        'error': 'Authentication required',
+                        'detail': 'You must be logged in to access this resource.'
+                    },
+                    status=401  # Unauthorized
+                )
+            
+            # Check user role
+            user_role = self.get_user_role(request.user)
+            
+            if user_role not in self.allowed_roles:
+                from django.http import JsonResponse
+                return JsonResponse(
+                    {
+                        'error': 'Insufficient permissions',
+                        'detail': 'You must be an admin or moderator to access this resource.',
+                        'required_roles': self.allowed_roles,
+                        'your_role': user_role
+                    },
+                    status=403  # Forbidden
+                )
+        
+        # Continue processing the request
+        response = self.get_response(request)
+        return response
+    
+    def requires_role_check(self, request):
+        """
+        Check if the request path requires role verification.
+        Args:
+            request: The HTTP request object
+        Returns:
+            bool: True if role check is required, False otherwise
+        """
+        # Check if the request path matches any protected paths
+        for protected_path in self.protected_paths:
+            if request.path.startswith(protected_path):
+                return True
+        
+        # Also check for any admin-related actions in the path
+        admin_keywords = ['admin', 'moderate', 'manage', 'delete', 'ban']
+        path_lower = request.path.lower()
+        
+        for keyword in admin_keywords:
+            if keyword in path_lower:
+                return True
+        
+        return False
+    
+    def get_user_role(self, user):
+        """
+        Get the user's role from the user object.
+        This method assumes the user model has a role field or related field.
+        Modify this method based on your user model structure.
+        """
+        # Method 1: Check if user has a 'role' field
+        if hasattr(user, 'role'):
+            return getattr(user, 'role', 'user').lower()
+        
+        # Method 2: Check Django's built-in permissions
+        if user.is_superuser:
+            return 'admin'
+        elif user.is_staff:
+            return 'moderator'
+        
+        # Method 3: Check user groups
+        if hasattr(user, 'groups'):
+            user_groups = [group.name.lower() for group in user.groups.all()]
+            for role in self.allowed_roles:
+                if role in user_groups:
+                    return role
+        
+        # Method 4: Check for custom profile model
+        if hasattr(user, 'profile') and hasattr(user.profile, 'role'):
+            return getattr(user.profile, 'role', 'user').lower()
+        
+        # Default to 'user' role
+        return 'user'
