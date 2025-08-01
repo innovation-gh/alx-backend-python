@@ -53,7 +53,11 @@ class Notification(models.Model):
 class MessageHistory(models.Model):
     message = models.ForeignKey(Message, on_delete=models.CASCADE, related_name='history')
     old_content = models.TextField()
+    edited_by = models.ForeignKey(User, on_delete=models.CASCADE, related_name='message_edits')
     edited_at = models.DateTimeField(default=timezone.now)
     
     class Meta:
         ordering = ['-edited_at']
+    
+    def __str__(self):
+        return f"Edit history for message {self.message.id} by {self.edited_by.username}"
