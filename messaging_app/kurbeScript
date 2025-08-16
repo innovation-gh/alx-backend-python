@@ -165,5 +165,4 @@ echo "  minikube ssh                        # SSH into minikube VM"
 echo "  minikube stop                       # Stop cluster"
 echo "  minikube delete                     # Delete cluster"
 echo
-
 exit 0
