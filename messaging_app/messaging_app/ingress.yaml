@@ -1,0 +1,63 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: django-messaging-app-ingress
+  namespace: default
+  annotations:
+    kubernetes.io/ingress.class: "nginx"
+    nginx.ingress.kubernetes.io/rewrite-target: /
+    nginx.ingress.kubernetes.io/ssl-redirect: "false"
+    nginx.ingress.kubernetes.io/force-ssl-redirect: "false"
+    nginx.ingress.kubernetes.io/proxy-body-size: "50m"
+    nginx.ingress.kubernetes.io/proxy-connect-timeout: "600"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "600"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "600"
+spec:
+  rules:
+  - host: messaging-app.local  # Change this to your domain
+    http:
+      paths:
+      - path: /api/
+        pathType: Prefix
+        backend:
+          service:
+            name: django-messaging-app-service  # Replace with your Django service name
+            port:
+              number: 80
+      - path: /admin/
+        pathType: Prefix
+        backend:
+          service:
+            name: django-messaging-app-service  # Replace with your Django service name
+            port:
+              number: 80
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: django-messaging-app-service  # Replace with your Django service name
+            port:
+              number: 80
+---
+# Alternative configuration without host (for local testing)
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: django-messaging-app-ingress-pathbased
+  namespace: default
+  annotations:
+    kubernetes.io/ingress.class: "nginx"
+    nginx.ingress.kubernetes.io/rewrite-target: /$2
+    nginx.ingress.kubernetes.io/ssl-redirect: "false"
+    nginx.ingress.kubernetes.io/force-ssl-redirect: "false"
+spec:
+  rules:
+  - http:
+      paths:
+      - path: /messaging(/|$)(.*)
+        pathType: Prefix
+        backend:
+          service:
+            name: django-messaging-app-service  # Replace with your Django service name
+            port:
+              number: 80

@@ -1,0 +1,40 @@
+# Commands for setting up Kubernetes Ingress for Django Messaging App
+
+# 1. Install Nginx Ingress Controller (using Helm)
+helm upgrade --install ingress-nginx ingress-nginx \
+  --repo https://kubernetes.github.io/ingress-nginx \
+  --namespace ingress-nginx --create-namespace
+
+# Alternative: Install using kubectl (if you don't have Helm)
+# kubectl apply -f https://raw.githubusercontent.com/kubernetes/ingress-nginx/controller-v1.8.2/deploy/static/provider/cloud/deploy.yaml
+
+# 2. Wait for the Nginx Ingress Controller to be ready
+kubectl wait --namespace ingress-nginx \
+  --for=condition=ready pod \
+  --selector=app.kubernetes.io/component=controller \
+  --timeout=120s
+
+# 3. Apply the Ingress configuration
+kubectl apply -f ingress.yaml
+
+# 4. Check the status of the Ingress
+kubectl get ingress
+
+# 5. Describe the Ingress for detailed information
+kubectl describe ingress django-messaging-app-ingress
+
+# 6. Get the external IP of the Nginx Ingress Controller
+kubectl get service ingress-nginx-controller --namespace=ingress-nginx
+
+# 7. For local testing, you might need to add an entry to /etc/hosts
+# echo "127.0.0.1 messaging-app.local" | sudo tee -a /etc/hosts
+
+# 8. Test the Ingress (replace with your actual external IP or domain)
+# curl -H "Host: messaging-app.local" http://EXTERNAL_IP/api/
+# curl -H "Host: messaging-app.local" http://EXTERNAL_IP/admin/
+
+# 9. To update the Ingress configuration after making changes
+kubectl apply -f ingress.yaml
+
+# 10. To delete the Ingress if needed
+# kubectl delete -f ingress.yaml
