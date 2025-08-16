@@ -1,0 +1,147 @@
+#!/bin/bash
+
+# Blue-Green Deployment Script for Django Messaging App
+set -e
+
+echo "=== Blue-Green Deployment Script ==="
+echo "Starting deployment process..."
+
+# Function to check pod status
+check_pods() {
+    local version=$1
+    echo "Checking $version deployment status..."
+    kubectl get pods -l app=django-messaging-app,version=$version
+    
+    # Wait for pods to be ready
+    kubectl wait --for=condition=ready pod -l app=django-messaging-app,version=$version --timeout=300s
+    
+    if [ $? -eq 0 ]; then
+        echo "$version deployment is ready!"
+        return 0
+    else
+        echo "$version deployment failed to become ready"
+        return 1
+    fi
+}
+
+# Function to check logs for errors
+check_logs() {
+    local version=$1
+    echo "Checking logs for $version deployment..."
+    
+    # Get pod names for the version
+    PODS=$(kubectl get pods -l app=django-messaging-app,version=$version -o jsonpath='{.items[*].metadata.name}')
+    
+    for pod in $PODS; do
+        echo "--- Logs for pod: $pod ---"
+        kubectl logs $pod --tail=20
+        
+        # Check for common error patterns
+        ERROR_COUNT=$(kubectl logs $pod | grep -i "error\|exception\|failed" | wc -l)
+        if [ $ERROR_COUNT -gt 0 ]; then
+            echo "WARNING: Found $ERROR_COUNT potential errors in $pod logs"
+        else
+            echo "No obvious errors found in $pod logs"
+        fi
+    done
+}
+
+# Function to switch traffic
+switch_traffic() {
+    local target_version=$1
+    echo "Switching traffic to $target_version version..."
+    
+    # Update the main service selector
+    kubectl patch service django-service -p '{"spec":{"selector":{"version":"'$target_version'"}}}'
+    
+    if [ $? -eq 0 ]; then
+        echo "Traffic successfully switched to $target_version"
+        return 0
+    else
+        echo "Failed to switch traffic to $target_version"
+        return 1
+    fi
+}
+
+# Step 1: Deploy Blue version (current version)
+echo "Step 1: Deploying Blue version..."
+kubectl apply -f blue_deployment.yaml
+kubectl apply -f kubeservice.yaml
+
+# Wait for blue deployment to be ready
+if check_pods "blue"; then
+    echo "Blue deployment successful"
+else
+    echo "Blue deployment failed"
+    exit 1
+fi
+
+# Check blue logs
+check_logs "blue"
+
+echo "Blue deployment completed successfully!"
+echo "Waiting 10 seconds before deploying green version..."
+sleep 10
+
+# Step 2: Deploy Green version (new version)
+echo "Step 2: Deploying Green version..."
+kubectl apply -f green_deployment.yaml
+
+# Wait for green deployment to be ready
+if check_pods "green"; then
+    echo "Green deployment successful"
+else
+    echo "Green deployment failed"
+    exit 1
+fi
+
+# Check green logs for errors
+check_logs "green"
+
+# Step 3: Health check on green version
+echo "Step 3: Performing health checks on green version..."
+GREEN_PODS=$(kubectl get pods -l app=django-messaging-app,version=green -o jsonpath='{.items[*].metadata.name}')
+
+for pod in $GREEN_PODS; do
+    echo "Testing health endpoint for $pod..."
+    kubectl exec $pod -- curl -f http://localhost:8000/health/ || {
+        echo "Health check failed for $pod"
+        exit 1
+    }
+done
+
+echo "All health checks passed for green version"
+
+# Step 4: Switch traffic to green version
+echo "Step 4: Switching traffic from blue to green..."
+if switch_traffic "green"; then
+    echo "Traffic switch completed successfully"
+else
+    echo "Traffic switch failed, rolling back..."
+    switch_traffic "blue"
+    exit 1
+fi
+
+# Step 5: Monitor new deployment
+echo "Step 5: Monitoring new deployment..."
+sleep 30
+
+# Final log check
+echo "Final log check for green version..."
+check_logs "green"
+
+# Step 6: Cleanup old blue deployment (optional)
+read -p "Do you want to cleanup the blue deployment? (y/N): " -n 1 -r
+echo
+if [[ $REPLY =~ ^[Yy]$ ]]; then
+    echo "Cleaning up blue deployment..."
+    kubectl delete deployment django-messaging-app-blue
+    kubectl delete service django-service-blue
+    echo "Blue deployment cleaned up"
+else
+    echo "Blue deployment kept for rollback purposes"
+fi
+
+echo "=== Blue-Green Deployment Completed Successfully ==="
+echo "Current active version: GREEN"
+echo "Service endpoint: kubectl get service django-service"
