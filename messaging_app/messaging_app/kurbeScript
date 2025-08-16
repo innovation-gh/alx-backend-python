@@ -1,0 +1,66 @@
+#!/bin/bash
+
+# kurbeScript - Kubernetes Setup Script
+# Starts a Kubernetes cluster, verifies it's running, and retrieves available pods
+
+set -e  # Exit on any error
+
+echo "Starting Kubernetes cluster setup..."
+
+# Function to check if command exists
+command_exists() {
+    command -v "$1" >/dev/null 2>&1
+}
+
+# Check if minikube is installed
+echo "Checking if minikube is installed..."
+if command_exists minikube; then
+    echo "minikube is already installed"
+    minikube version
+else
+    echo "Installing minikube..."
+    curl -LO https://storage.googleapis.com/minikube/releases/latest/minikube-linux-amd64
+    sudo install minikube-linux-amd64 /usr/local/bin/minikube
+    rm -f minikube-linux-amd64
+    echo "minikube installed successfully"
+fi
+
+# Check if kubectl is installed
+echo "Checking if kubectl is installed..."
+if command_exists kubectl; then
+    echo "kubectl is already installed"
+else
+    echo "Installing kubectl..."
+    curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl"
+    chmod +x kubectl
+    sudo mv kubectl /usr/local/bin/kubectl
+    echo "kubectl installed successfully"
+fi
+
+# Start Kubernetes cluster
+echo "Starting Kubernetes cluster..."
+if minikube status >/dev/null 2>&1; then
+    echo "Kubernetes cluster is already running"
+else
+    minikube start --driver=docker 2>/dev/null || \
+    minikube start --driver=virtualbox 2>/dev/null || \
+    minikube start --driver=none
+    echo "Kubernetes cluster started successfully"
+fi
+
+# Verify cluster is running using kubectl cluster-info
+echo "Verifying cluster is running..."
+kubectl cluster-info
+
+# Wait for cluster to be ready
+echo "Waiting for cluster to be ready..."
+kubectl wait --for=condition=Ready nodes --all --timeout=300s
+
+# Retrieve available pods
+echo "Retrieving available pods..."
+kubectl get pods
+
+echo "Retrieving pods in all namespaces..."
+kubectl get pods --all-namespaces
+
+echo "Kubernetes cluster setup completed successfully!"
