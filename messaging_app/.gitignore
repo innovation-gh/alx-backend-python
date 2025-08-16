@@ -2,3 +2,20 @@
 # Environment variables
 .env
 *.env
+# Large binary files that shouldn't be in repository
+minikube-linux-amd64
+kubectl
+kind
+*.exe
+*.deb
+*.rpm
+
+# OS and IDE files
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+*.swp
+*.swo
+*.tmp
+*.log
