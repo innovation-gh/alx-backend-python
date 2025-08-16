@@ -1,168 +1,66 @@
 #!/bin/bash
 
-# kurbeScript - Linux Mint Kubernetes Setup Script
-# Optimized for Linux Mint systems
+# kurbeScript - Kubernetes Setup Script
+# Starts a Kubernetes cluster, verifies it's running, and retrieves available pods
 
 set -e  # Exit on any error
 
-echo "=== Kubernetes Setup for Linux Mint ==="
-echo
+echo "Starting Kubernetes cluster setup..."
 
-# Function to check if a command exists
+# Function to check if command exists
 command_exists() {
     command -v "$1" >/dev/null 2>&1
 }
 
-# Detect Linux Mint version
-if [ -f /etc/linuxmint/info ]; then
-    echo "Detected Linux Mint:"
-    cat /etc/linuxmint/info
-else
-    echo "Linux distribution: $(lsb_release -d)"
-fi
-echo
-
 # Check if minikube is installed
-echo "1. Checking if Minikube is installed..."
+echo "Checking if minikube is installed..."
 if command_exists minikube; then
-    echo "✓ Minikube is installed"
+    echo "minikube is already installed"
     minikube version
 else
-    echo "Installing Minikube..."
+    echo "Installing minikube..."
     curl -LO https://storage.googleapis.com/minikube/releases/latest/minikube-linux-amd64
     sudo install minikube-linux-amd64 /usr/local/bin/minikube
-    rm minikube-linux-amd64
-    echo "✓ Minikube installed successfully"
+    rm -f minikube-linux-amd64
+    echo "minikube installed successfully"
 fi
 
-echo
-
 # Check if kubectl is installed
-echo "2. Checking if kubectl is installed..."
+echo "Checking if kubectl is installed..."
 if command_exists kubectl; then
-    echo "✓ kubectl is installed"
-    kubectl version --client
+    echo "kubectl is already installed"
 else
     echo "Installing kubectl..."
     curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl"
     chmod +x kubectl
     sudo mv kubectl /usr/local/bin/kubectl
-    echo "✓ kubectl installed successfully"
+    echo "kubectl installed successfully"
 fi
 
-echo
-
-# Check for VirtualBox (preferred driver for Linux Mint)
-echo "3. Checking virtualization options..."
-if command_exists vboxmanage; then
-    echo "✓ VirtualBox is available"
-    PREFERRED_DRIVER="virtualbox"
-elif command_exists docker; then
-    echo "✓ Docker is available"
-    PREFERRED_DRIVER="docker"
-else
-    echo "Installing VirtualBox..."
-    sudo apt update
-    sudo apt install -y virtualbox virtualbox-ext-pack
-    PREFERRED_DRIVER="virtualbox"
-fi
-
-echo
-
-# Start Minikube cluster
-echo "4. Starting Kubernetes cluster with Minikube..."
-
-# Check if minikube is already running
+# Start Kubernetes cluster
+echo "Starting Kubernetes cluster..."
 if minikube status >/dev/null 2>&1; then
-    echo "✓ Minikube cluster is already running"
+    echo "Kubernetes cluster is already running"
 else
-    echo "Starting Minikube cluster with $PREFERRED_DRIVER driver..."
-    
-    if [ "$PREFERRED_DRIVER" = "virtualbox" ]; then
-        minikube start --driver=virtualbox --memory=2048 --cpus=2
-    elif [ "$PREFERRED_DRIVER" = "docker" ]; then
-        minikube start --driver=docker
-    else
-        # Fallback to auto-detection
-        minikube start
-    fi
-    
-    if [ $? -eq 0 ]; then
-        echo "✓ Minikube cluster started successfully"
-    else
-        echo "✗ Failed to start Minikube cluster"
-        exit 1
-    fi
+    minikube start --driver=docker 2>/dev/null || \
+    minikube start --driver=virtualbox 2>/dev/null || \
+    minikube start --driver=none
+    echo "Kubernetes cluster started successfully"
 fi
 
-echo
-
-# Verify cluster is running
-echo "5. Verifying cluster is running..."
-echo "Cluster Information:"
+# Verify cluster is running using kubectl cluster-info
+echo "Verifying cluster is running..."
 kubectl cluster-info
 
-if [ $? -eq 0 ]; then
-    echo "✓ Kubernetes cluster is running and accessible"
-else
-    echo "✗ Failed to get cluster information"
-    exit 1
-fi
-
-echo
-
 # Wait for cluster to be ready
-echo "6. Waiting for cluster to be fully ready..."
+echo "Waiting for cluster to be ready..."
 kubectl wait --for=condition=Ready nodes --all --timeout=300s
 
-echo
-
 # Retrieve available pods
-echo "7. Retrieving available pods..."
-echo "Pods in default namespace:"
+echo "Retrieving available pods..."
 kubectl get pods
 
-echo
-echo "Pods in all namespaces:"
+echo "Retrieving pods in all namespaces..."
 kubectl get pods --all-namespaces
 
-echo
-
-# Show cluster status
-echo "8. Cluster status overview:"
-echo
-echo "Nodes:"
-kubectl get nodes -o wide
-
-echo
-echo "System pods:"
-kubectl get pods -n kube-system
-
-echo
-echo "Services:"
-kubectl get services --all-namespaces
-
-echo
-
-# Minikube specific information
-echo "9. Minikube specific information:"
-minikube status
-echo
-echo "Minikube IP:"
-minikube ip
-
-echo
-
-echo "=== Setup Complete! ==="
-echo "✓ Kubernetes cluster is running on Linux Mint"
-echo "✓ Driver used: $(minikube profile list | grep minikube | awk '{print $4}')"
-echo
-echo "Useful commands:"
-echo "  kubectl get pods                    # List pods"
-echo "  kubectl get nodes                   # List nodes"
-echo "  minikube dashboard                  # Open web dashboard"
-echo "  minikube ssh                        # SSH into minikube VM"
-echo "  minikube stop                       # Stop cluster"
-echo "  minikube delete                     # Delete cluster"
-echo
-exit 0
+echo "Kubernetes cluster setup completed successfully!"
