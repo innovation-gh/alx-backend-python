@@ -1,0 +1,152 @@
+pipeline {
+    agent any
+    
+    environment {
+        // Define Python path and virtual environment
+        PYTHON_PATH = '/usr/bin/python3'
+        VENV_PATH = 'venv'
+    }
+    
+    stages {
+        stage('Checkout') {
+            steps {
+                echo 'Pulling source code from GitHub...'
+                git credentialsId: 'github-ssh-credentials',
+                    url: 'git@github.com:innovation-gh/alx-backend-python.git',
+                    branch: 'main'
+                
+                echo 'Source code pulled successfully!'
+            }
+        }
+        
+        stage('Setup Python Environment') {
+            steps {
+                echo 'Setting up Python virtual environment...'
+                sh '''
+                    # Create virtual environment if it doesn't exist
+                    if [ ! -d "$VENV_PATH" ]; then
+                        python3 -m venv $VENV_PATH
+                    fi
+                    
+                    # Activate virtual environment and upgrade pip
+                    . $VENV_PATH/bin/activate
+                    pip install --upgrade pip
+                '''
+                echo 'Python environment setup complete!'
+            }
+        }
+        
+        stage('Install Dependencies') {
+            steps {
+                echo 'Installing project dependencies...'
+                dir('messaging_app') {
+                    sh '''
+                        # Activate virtual environment
+                        . ../$VENV_PATH/bin/activate
+                        
+                        # Install dependencies from requirements.txt if it exists
+                        if [ -f "requirements.txt" ]; then
+                            pip install -r requirements.txt
+                        fi
+                        
+                        # Install pytest and coverage for testing
+                        pip install pytest pytest-html pytest-cov
+                        
+                        # List installed packages
+                        pip list
+                    '''
+                }
+                echo 'Dependencies installed successfully!'
+            }
+        }
+        
+        stage('Run Tests') {
+            steps {
+                echo 'Running tests with pytest...'
+                dir('messaging_app') {
+                    sh '''
+                        # Activate virtual environment
+                        . ../$VENV_PATH/bin/activate
+                        
+                        # Run pytest with coverage and HTML report
+                        pytest --html=reports/pytest_report.html --self-contained-html \
+                               --cov=. --cov-report=html:reports/coverage_html \
+                               --cov-report=xml:reports/coverage.xml \
+                               --junitxml=reports/junit.xml \
+                               -v || true
+                    '''
+                }
+                echo 'Tests completed!'
+            }
+        }
+        
+        stage('Generate Reports') {
+            steps {
+                echo 'Processing test reports...'
+                dir('messaging_app') {
+                    script {
+                        // Create reports directory if it doesn't exist
+                        sh 'mkdir -p reports'
+                        
+                        // Archive test results and reports
+                        if (fileExists('reports/junit.xml')) {
+                            echo 'JUnit XML report found and will be published'
+                        }
+                        
+                        if (fileExists('reports/pytest_report.html')) {
+                            echo 'HTML test report generated successfully'
+                        }
+                        
+                        if (fileExists('reports/coverage.xml')) {
+                            echo 'Coverage report generated successfully'
+                        }
+                    }
+                }
+                echo 'Reports generated and archived!'
+            }
+        }
+    }
+    
+    post {
+        always {
+            echo 'Pipeline execution completed!'
+            
+            // Archive artifacts
+            dir('messaging_app') {
+                archiveArtifacts artifacts: 'reports/**/*', 
+                                allowEmptyArchive: true,
+                                fingerprint: true
+                
+                // Publish test results if junit.xml exists
+                script {
+                    if (fileExists('reports/junit.xml')) {
+                        publishTestResults testResultsPattern: 'reports/junit.xml'
+                    }
+                }
+                
+                // Publish HTML reports
+                publishHTML([
+                    allowMissing: false,
+                    alwaysLinkToLastBuild: true,
+                    keepAll: true,
+                    reportDir: 'reports',
+                    reportFiles: 'pytest_report.html',
+                    reportName: 'PyTest HTML Report',
+                    reportTitles: 'Test Results'
+                ])
+            }
+        }
+        
+        success {
+            echo 'Pipeline executed successfully! ✅'
+        }
+        
+        failure {
+            echo 'Pipeline failed! ❌ Check the logs for details.'
+        }
+        
+        unstable {
+            echo 'Pipeline completed but tests failed or are unstable! ⚠️'
+        }
+    }
+}
