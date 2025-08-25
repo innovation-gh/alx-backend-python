@@ -1,0 +1,148 @@
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main, develop ]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    
+    services:
+      mysql:
+        image: mysql:8.0
+        env:
+          MYSQL_ROOT_PASSWORD: rootpassword
+          MYSQL_DATABASE: messaging_app_test
+          MYSQL_USER: testuser
+          MYSQL_PASSWORD: testpassword
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=3
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.9'
+
+    - name: Cache pip dependencies
+      uses: actions/cache@v3
+      with:
+        path: ~/.cache/pip
+        key: ${{ runner.os }}-pip-${{ hashFiles('**/requirements.txt') }}
+        restore-keys: |
+          ${{ runner.os }}-pip-
+
+    - name: Install system dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y mysql-client libmysqlclient-dev
+
+    - name: Install Python dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r messaging_app/requirements.txt
+        pip install pytest pytest-django pytest-cov mysqlclient
+
+    - name: Wait for MySQL to be ready
+      run: |
+        for i in {1..30}; do
+          if mysqladmin ping -h 127.0.0.1 -P 3306 -u root -prootpassword --silent; then
+            echo "MySQL is ready!"
+            break
+          fi
+          echo "Waiting for MySQL... ($i/30)"
+          sleep 2
+        done
+
+    - name: Set up database
+      run: |
+        mysql -h 127.0.0.1 -P 3306 -u root -prootpassword -e "CREATE DATABASE IF NOT EXISTS messaging_app_test;"
+        mysql -h 127.0.0.1 -P 3306 -u root -prootpassword -e "GRANT ALL PRIVILEGES ON messaging_app_test.* TO 'testuser'@'%';"
+        mysql -h 127.0.0.1 -P 3306 -u root -prootpassword -e "FLUSH PRIVILEGES;"
+
+    - name: Run Django migrations
+      working-directory: ./messaging_app
+      env:
+        DATABASE_URL: mysql://testuser:testpassword@127.0.0.1:3306/messaging_app_test
+        DJANGO_SETTINGS_MODULE: messaging_app.settings.test
+      run: |
+        python manage.py migrate --settings=messaging_app.settings.test
+
+    - name: Run Django tests
+      working-directory: ./messaging_app
+      env:
+        DATABASE_URL: mysql://testuser:testpassword@127.0.0.1:3306/messaging_app_test
+        DJANGO_SETTINGS_MODULE: messaging_app.settings.test
+      run: |
+        python manage.py test --settings=messaging_app.settings.test
+
+    - name: Run pytest with coverage
+      working-directory: ./messaging_app
+      env:
+        DATABASE_URL: mysql://testuser:testpassword@127.0.0.1:3306/messaging_app_test
+        DJANGO_SETTINGS_MODULE: messaging_app.settings.test
+      run: |
+        pytest --cov=. --cov-report=xml --cov-report=html --cov-report=term-missing
+
+    - name: Upload coverage reports
+      uses: codecov/codecov-action@v3
+      with:
+        file: ./messaging_app/coverage.xml
+        directory: ./messaging_app/
+        flags: unittests
+        name: codecov-umbrella
+        fail_ci_if_error: false
+
+    - name: Archive test results
+      uses: actions/upload-artifact@v3
+      if: always()
+      with:
+        name: test-results
+        path: |
+          messaging_app/coverage.xml
+          messaging_app/htmlcov/
+        retention-days: 7
+
+  lint:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.9'
+
+    - name: Install linting dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install flake8 black isort
+
+    - name: Run Black formatting check
+      working-directory: ./messaging_app
+      run: |
+        black --check --diff .
+
+    - name: Run isort import sorting check
+      working-directory: ./messaging_app
+      run: |
+        isort --check-only --diff .
+
+    - name: Run flake8 linting
+      working-directory: ./messaging_app
+      run: |
+        flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
+        flake8 . --count --exit-zero --max-complexity=10 --max-line-length=127 --statistics
