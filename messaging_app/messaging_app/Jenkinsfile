@@ -15,6 +15,9 @@ pipeline {
                     url: 'git@github.com:innovation-gh/alx-backend-python.git',
                     branch: 'main'
                 
+                // Show current git branch for verification
+                sh 'git branch'
+                
                 echo 'Source code pulled successfully!'
             }
         }
@@ -44,13 +47,18 @@ pipeline {
                         # Activate virtual environment
                         . ../$VENV_PATH/bin/activate
                         
-                        # Install dependencies from requirements.txt if it exists
+                        # Install dependencies from messaging_app/requirements.txt if it exists
                         if [ -f "requirements.txt" ]; then
-                            pip install -r requirements.txt
+                            pip3 install -r requirements.txt
+                        fi
+                        
+                        # Also check for messaging_app/requirements.txt path
+                        if [ -f "messaging_app/requirements.txt" ]; then
+                            pip3 install -r messaging_app/requirements.txt
                         fi
                         
                         # Install pytest and coverage for testing
-                        pip install pytest pytest-html pytest-cov
+                        pip3 install pytest pytest-html pytest-cov
                         
                         # List installed packages
                         pip list
